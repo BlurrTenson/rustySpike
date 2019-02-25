@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::Display;
 use rand::Rng;
+use rand::prelude::IteratorRandom;
 
 pub struct node {
     function_table: Vec<bool>, // truth table
@@ -10,22 +11,29 @@ pub struct node {
 }
 
 pub struct RBN<'n> {
-    nodes: Vec<(node, &'n node, &'n node)>,
+    nodes : Vec<node>, 
+    connections: Vec<(&'n node, &'n mut &'n node, &'n mut &'n node)>,
 }
 impl<'n> RBN<'n>{
-    pub fn new (k: u8, n: u16) -> RBN{//max rbn size is std::u16::MAX() 
-        let inv_nodes = Vec::new(); 
+    pub fn new (k: u8, n: u16) -> RBN<'n>{//max rbn size is std::u16::MAX() 
+        let mut inv_nodes = Vec::new(); 
         for _x in 0..n{
             inv_nodes.push(node::new(k));
         }
-        let links = Vec::new();
-        for x in inv_nodes.into_iter(){
-            let t = (x);
-            links.push(t);
+        let mut links = Vec::new();
+        let mut rnjesus = rand::thread_rng();
+        let &mut l;
+        let &mut r;
+        for y in inv_nodes.iter(){
+            l =  inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty");  
+            r =  inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty");  
+
+            links.push((y,  l,  r));
         }
 
-        RBN<'n>{
-            nodes: links  
+        RBN {
+            connections: links,
+            nodes: inv_nodes,
         }
     }
 
