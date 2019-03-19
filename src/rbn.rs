@@ -2,42 +2,71 @@ use std::fmt;
 use std::fmt::Display;
 use rand::Rng;
 use rand::prelude::IteratorRandom;
+use std::cell::RefCell;
+use std::rc::Rc;
 
+#[derive(Debug)]
 pub struct node {
     function_table: Vec<bool>, // truth table
-    s_t: bool,                 //tstae at current time step
-    s_nt: bool,                //state at next time step
+    s_t: Option<bool>,                 //tstae at current time step
+    s_nt: Option<bool>,                //state at next time step
     pub tbl_size: usize,
 }
 
-pub struct RBN<'n> {
-    nodes : Vec<node>, 
-    connections: Vec<(&'n node, &'n mut &'n node, &'n mut &'n node)>,
+#[derive(Debug)]
+pub struct RBN {
+    nodes : Vec<Rc<RefCell<node>>>, 
+    connections: Vec<(Rc<RefCell<node>>, Rc<RefCell<node>>, Rc<RefCell<node>>)>,
 }
-impl<'n> RBN<'n>{
-    pub fn new (k: u8, n: u16) -> RBN<'n>{//max rbn size is std::u16::MAX() 
+impl RBN{
+    pub fn new (k: u8, n: u16) -> RBN{//max rbn size is std::u16::MAX() 
         let mut inv_nodes = Vec::new(); 
         for _x in 0..n{
-            inv_nodes.push(node::new(k));
+            inv_nodes.push(Rc::new(
+                                RefCell::new(
+                                    node::new(k))));
         }
         let mut links = Vec::new();
         let mut rnjesus = rand::thread_rng();
-        let &mut l;
-        let &mut r;
-        for y in inv_nodes.iter(){
-            l =  inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty");  
-            r =  inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty");  
+        for idx in 0..inv_nodes.len(){
+            links.push((inv_nodes[idx].clone(),
+                            inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty").clone(),  
+                            inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty").clone()  
+                       ))
 
-            links.push((y,  l,  r));
         }
-
         RBN {
             connections: links,
             nodes: inv_nodes,
         }
     }
+    /*
+     * Update nodes for next time step
+     */
+    pub fn step(&self){
+        for nds in &self.connections{
+             let l = nds.1.borrow_mut().get_current_state();
+             let r = nds.2.borrow_mut().get_current_state();
+             let mut sum =0; 
+             if l 
+                { sum += 1; }
+             if r
+                { sum += 2; }
+             nds.0.borrow_mut().calc_next_state(sum);
+        }
+    }
+    /*
+     * Sync all nodes to the new timestep
+     */
+    pub fn sync(&self){
+        for nds in &self.nodes{
+             nds.borrow_mut().update_state(); 
+        }
+    }
 
 }
+
+
 impl node {
     /*
      * New node with randome boolean table of size 2^<no_in>
@@ -68,8 +97,8 @@ impl node {
 
         node {
             function_table: table, // node
-            s_t: true,
-            s_nt: false,
+            s_t: Some(true),
+            s_nt: Some(false),
             tbl_size: sz,
         }
     }
@@ -83,19 +112,46 @@ impl node {
         }
         node {
             function_table: tbl,
-            s_t: true,
-            s_nt: true,
+            s_t: Some(true),
+            s_nt: Some(true),
             tbl_size: sz,
         }
     }
     /*
      *Get node state by <in_sum> which is combination of input nodes 
+     * TODO Remove this it's only really for testing.
      */
-    pub fn get_state(&self , in_sum : usize) -> bool{
+    pub fn get_state(&mut self , in_sum : usize) -> bool{
         if self.function_table.len() < in_sum {
             panic!{"Node lookup out of range", }
         }
+        self.s_t = Some(self.function_table[in_sum]);
        return self.function_table[in_sum]; 
+    }
+    /*
+     * Calculates next state by <in_sum> which is combination of input nodes 
+     */
+    pub fn calc_next_state(&mut self, in_sum: usize){
+        if self.function_table.len() < in_sum {
+            panic!{"Node lookup out of range", }
+        }
+        self.s_nt = Some(self.function_table[in_sum]);
+    }
+    /*
+     * Updates the current state with the new calculated resets the next state
+     */
+    pub fn update_state(&mut self){
+        self.s_t = self.s_nt; 
+        self.s_nt = None;
+    }
+    /*
+     * Gets the current timestep state 
+     */
+    pub fn get_current_state(&self) -> bool{
+        return match self.s_t {
+                Some(thing) => thing,
+                None        => panic!("There is no current state , I'm confused"),
+        };
     }
 }
 impl Display for node {
@@ -169,7 +225,7 @@ mod tests {
         tbl.push(true);
         tbl.push(false);
 
-        let n = node::new_with_tbl(tbl);
+        let mut n = node::new_with_tbl(tbl);
         assert_eq!(true, n.get_state(0));
         assert_eq!(false, n.get_state(1));
         assert_eq!(true, n.get_state(2));
@@ -183,7 +239,7 @@ mod tests {
         tbl.push(true);
         tbl.push(false);
 
-        let n = node::new_with_tbl(tbl);
+        let mut n = node::new_with_tbl(tbl);
         assert_eq!(false, n.get_state(3));
     }
 }

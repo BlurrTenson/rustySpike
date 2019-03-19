@@ -9,11 +9,16 @@ fn main() {
         tbl.push(true);
         tbl.push(false);
 
-        let n = rbn::node::new_with_tbl(tbl);
+        let mut n = rbn::node::new_with_tbl(tbl);
         assert_eq!(true, n.get_state(0));
         assert_eq!(false, n.get_state(1));
         assert_eq!(true, n.get_state(2));
         assert_eq!(false, n.get_state(3));
     
+        let newrbn = rbn::RBN::new(2, 2);
+        println!("{:?}", newrbn);
+        newrbn.step();
+        newrbn.sync();
+        println!("{:?}", newrbn);
 }
 
