@@ -24,7 +24,10 @@ impl RBN{
         for _x in 0..n{
             inv_nodes.push(Rc::new(
                                 RefCell::new(
-                                    node::new(k))));
+                                    node::new(k)
+                                            )
+                                  )
+                          );
         }
         let mut links = Vec::new();
         let mut rnjesus = rand::thread_rng();
@@ -32,6 +35,39 @@ impl RBN{
             links.push((inv_nodes[idx].clone(),
                             inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty").clone(),  
                             inv_nodes.iter().choose(&mut rnjesus).expect("Node list empty").clone()  
+                       ))
+
+        }
+        RBN {
+            connections: links,
+            nodes: inv_nodes,
+        }
+    }
+    /*
+    * Creates a new RBN with a predefined structure. Nodes defined by truth tables in <nd_tbls>
+    * links defined by indexes in strct_tbl 
+    */
+    pub fn new_from_def (nd_tbls: Vec<Vec<bool>>, strct_tbl:Vec<(usize, usize)>) -> RBN{
+        if nd_tbls.len() != strct_tbl.len(){
+            panic!("Length mismatch number of nodes = {}, structure table lenght = {}\n",
+                        nd_tbls.len(),
+                        strct_tbl.len()
+                  ); 
+        }
+        let mut inv_nodes = Vec::new(); 
+        for n in nd_tbls.into_iter(){
+            inv_nodes.push(Rc::new(
+                                RefCell::new(
+                                    node::new_with_tbl(n)
+                                            )
+                                  )
+                          );
+        }
+        let mut links = Vec::new();
+        for idx in 0..inv_nodes.len(){
+            links.push((inv_nodes[idx].clone(),
+                            inv_nodes[strct_tbl[idx].0].clone(),  
+                            inv_nodes[strct_tbl[idx].1].clone(), 
                        ))
 
         }
