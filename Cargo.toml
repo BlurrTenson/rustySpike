@@ -5,3 +5,4 @@ authors = ["Mike Krastev <michael.krastev@faradaygrid.com>"]
 
 [dependencies]
 rand = "0.6.5"
+bit_field = "0.9.0"
