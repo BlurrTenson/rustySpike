@@ -1,6 +1,7 @@
 extern crate bit_field;
 extern crate rand;
 
+mod node;
 mod particle;
 mod rbn;
 pub mod temp;
