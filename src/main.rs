@@ -110,18 +110,14 @@ fn main() {
     rbn_struct.push((9, 8));
 
     let mut newrbn = rbn::RBN::new(2, 12);
-    eprintln!("{:?}", newrbn.calculate_particle());
-    println!("{:?}", vec![true, false, true, false]);
-    println!("{:#?}", vec![true, false, true, false]);
-    //println!("{:?}", newrbn);
-    //newrbn.step();
-    //newrbn.sync();
-    //println!("{:?}", newrbn);
-    //newrbn.calculate_particle();
+    //let mut newrbn = rbn::RBN::new_from_def(nds, rbn_struct);
 
     println!("{}", newrbn);
     println!("{}", newrbn.fmt_header());
-    let _cl1 = newrbn.calculate_cycle_ln(0b00000000000000000000000000000110101101);
+    eprintln!(
+        "{:?}",
+        newrbn.calculate_particle(0b00000000000000000000000000000110101101)
+    );
     println!("{}", newrbn.fmt_header());
     newrbn.step();
     newrbn.sync();

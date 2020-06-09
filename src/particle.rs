@@ -1,9 +1,12 @@
+use crate::temp::Temperature;
 ///Particles are either stable or unstable depending on the sub-symbolic dynamics. Unstable
 ///particles undergo some stabalising action (such as decomposition)
+/// TODO This needs to be redone correctly, I think an RBN_Properties stcuture is not a bad idea to
+/// store the relevant bits of data that aren't stability specific (eg cycle and transient)
 #[derive(Debug)]
 pub enum Stability {
     Stable,
-    Unstable,
+    Unstable { cycle: u64, transient: u64 },
 }
 
 pub struct BondingSite {}
@@ -11,7 +14,7 @@ pub struct BondingSite {}
 /// A Particle which IsSubSymbolic must be recaluclated when system changes in order to determine
 /// if the particle's internal state has changed  
 pub trait IsSubSymbolic {
-    fn calculate_particle(&self) -> Stability;
+    fn calculate_particle(&mut self, init_state: Temperature) -> Stability;
 }
 
 /// A particle which is bondable has a number of bonding sites each of which some associated

@@ -28,6 +28,7 @@ pub struct RBN {
     nodes: Vec<Rc<RefCell<Node>>>,
     connections: Vec<(Rc<RefCell<Node>>, Rc<RefCell<Node>>, Rc<RefCell<Node>>)>,
     cycle_len: Option<u64>,
+    trans_len: Option<u64>,
 }
 
 impl RBN {
@@ -69,6 +70,7 @@ impl RBN {
             connections: links,
             nodes: inv_nodes,
             cycle_len: None,
+            trans_len: None,
         }
     }
 
@@ -100,6 +102,7 @@ impl RBN {
             connections: links,
             nodes: inv_nodes,
             cycle_len: None,
+            trans_len: None,
         }
     }
     fn set_state(&self, state: &RBNState) {
@@ -235,15 +238,47 @@ impl IsCyclic for RBN {
         self.cycle_len = Some(cycle_count);
         return cycle_count;
     }
-    fn calculate_transient_ln(&self, _init_state: Temperature) {}
+
+    fn calculate_transient_ln(&mut self, init_state: Temperature) -> u64 {
+        let mut cl;
+        if self.cycle_len.is_some() {
+            cl = self.cycle_len.unwrap();
+        } else {
+            panic!("Calculating transient with a None cycle lenght");
+        }
+        let mut hare: RBNState;
+        let mut tortoise: RBNState;
+        hare = RBNState::from(init_state);
+        tortoise = RBNState::from(init_state);
+        self.set_state(&hare);
+        //Put hare 1 cl away from tortose
+        for _idx in 0..cl {
+            hare = self.step();
+            self.sync();
+        }
+        let mut mu = 0;
+        while tortoise != hare {
+            self.set_state(&tortoise);
+            tortoise = self.step();
+            self.set_state(&hare);
+            hare = self.step();
+            mu += 1;
+        }
+        self.trans_len = Some(mu);
+        return mu;
+    }
+
     fn calculate_liveliness(&self, _init_state: Temperature) {}
 }
 
-/// RBNs are atomic and therefore inherently stable
-/// TODO is that true?
 impl IsSubSymbolic for RBN {
-    fn calculate_particle(&self) -> Stability {
-        return Stability::Stable;
+    fn calculate_particle(&mut self, init_state: Temperature) -> Stability {
+        let cl = self.calculate_cycle_ln(init_state);
+        let tran = self.calculate_transient_ln(init_state);
+        return Stability::Unstable {
+            cycle: cl,
+            transient: tran,
+        };
     }
 }
 impl Node {
@@ -509,8 +544,10 @@ mod tests {
         println!("{}", newrbn);
         println!("{}", newrbn.fmt_header());
         let _cl1 = newrbn.calculate_cycle_ln(0b000000000101);
+        let _mu1 = newrbn.calculate_transient_ln(0b000000000101);
         //This generates a cycle length of 4
         assert_eq!(Some(4), newrbn.cycle_len);
+        assert_eq!(Some(5), newrbn.trans_len);
         let expected_struct = "ID\tFunction\tStruct\n0,\t1,0,0,1,\t4,5\n1,\t1,1,0,0,\t3,5\n2,\t1,0,0,0,\t0,10\n3,\t1,0,1,1,\t1,4\n4,\t1,1,0,0,\t3,4\n5,\t0,0,0,0,\t4,6\n6,\t1,1,1,0,\t4,8\n7,\t0,1,1,0,\t11,4\n8,\t1,0,0,0,\t2,3\n9,\t0,0,1,0,\t2,11\n10,\t0,1,1,0,\t0,5\n11,\t1,0,1,1,\t9,8\n";
         assert_eq!(format!("{}", newrbn), expected_struct);
         let mut state_str = String::new();

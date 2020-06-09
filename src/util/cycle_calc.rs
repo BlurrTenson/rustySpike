@@ -16,6 +16,6 @@ pub trait IsSynchronous {
 /// syncronisation but we can deal with that probably never )  
 pub trait IsCyclic: IsSynchronous {
     fn calculate_cycle_ln(&mut self, init_state: Temperature) -> u64;
-    fn calculate_transient_ln(&self, init_state: Temperature);
+    fn calculate_transient_ln(&mut self, init_state: Temperature) -> u64;
     fn calculate_liveliness(&self, init_state: Temperature);
 }
