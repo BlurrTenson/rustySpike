@@ -129,6 +129,64 @@ impl RBN {
         }
         form_string
     }
+
+    fn calculate_cycle_ln(&mut self, init_state: Temperature) -> u64 {
+        let mut hare: RBNState;
+        let mut tortoise: RBNState;
+        let mut cycle_count = 1;
+        let mut power = 1;
+
+        tortoise = RBNState::from(init_state);
+        self.set_state(&tortoise);
+        println!("{}", self.fmt_state());
+        hare = self.step();
+        self.sync();
+        println!("{}", self.fmt_state());
+        while tortoise != hare {
+            if power == cycle_count {
+                tortoise = hare;
+                power = power * 2;
+                cycle_count = 0;
+            }
+            hare = self.step();
+            self.sync();
+            println!("{}", self.fmt_state());
+            cycle_count += 1;
+        }
+        self.cycle_len = Some(cycle_count);
+        return cycle_count;
+    }
+
+    fn calculate_transient_ln(&mut self, init_state: Temperature) -> u64 {
+        let mut cl;
+        if self.cycle_len.is_some() {
+            cl = self.cycle_len.unwrap();
+        } else {
+            panic!("Calculating transient with a None cycle lenght");
+        }
+        let mut hare: RBNState;
+        let mut tortoise: RBNState;
+        hare = RBNState::from(init_state);
+        tortoise = RBNState::from(init_state);
+        self.set_state(&hare);
+        //Put hare 1 cl away from tortose
+        for _idx in 0..cl {
+            hare = self.step();
+            self.sync();
+        }
+        let mut mu = 0;
+        while tortoise != hare {
+            self.set_state(&tortoise);
+            tortoise = self.step();
+            self.set_state(&hare);
+            hare = self.step();
+            mu += 1;
+        }
+        self.trans_len = Some(mu);
+        return mu;
+    }
+
+    fn calculate_liveliness(&self, _init_state: Temperature) {}
 }
 
 impl From<u16> for RBNState {
@@ -210,65 +268,6 @@ impl IsSynchronous for RBN {
             nds.borrow_mut().update_state();
         }
     }
-}
-impl IsCyclic for RBN {
-    fn calculate_cycle_ln(&mut self, init_state: Temperature) -> u64 {
-        let mut hare: RBNState;
-        let mut tortoise: RBNState;
-        let mut cycle_count = 1;
-        let mut power = 1;
-
-        tortoise = RBNState::from(init_state);
-        self.set_state(&tortoise);
-        println!("{}", self.fmt_state());
-        hare = self.step();
-        self.sync();
-        println!("{}", self.fmt_state());
-        while tortoise != hare {
-            if power == cycle_count {
-                tortoise = hare;
-                power = power * 2;
-                cycle_count = 0;
-            }
-            hare = self.step();
-            self.sync();
-            println!("{}", self.fmt_state());
-            cycle_count += 1;
-        }
-        self.cycle_len = Some(cycle_count);
-        return cycle_count;
-    }
-
-    fn calculate_transient_ln(&mut self, init_state: Temperature) -> u64 {
-        let mut cl;
-        if self.cycle_len.is_some() {
-            cl = self.cycle_len.unwrap();
-        } else {
-            panic!("Calculating transient with a None cycle lenght");
-        }
-        let mut hare: RBNState;
-        let mut tortoise: RBNState;
-        hare = RBNState::from(init_state);
-        tortoise = RBNState::from(init_state);
-        self.set_state(&hare);
-        //Put hare 1 cl away from tortose
-        for _idx in 0..cl {
-            hare = self.step();
-            self.sync();
-        }
-        let mut mu = 0;
-        while tortoise != hare {
-            self.set_state(&tortoise);
-            tortoise = self.step();
-            self.set_state(&hare);
-            hare = self.step();
-            mu += 1;
-        }
-        self.trans_len = Some(mu);
-        return mu;
-    }
-
-    fn calculate_liveliness(&self, _init_state: Temperature) {}
 }
 
 impl IsSubSymbolic for RBN {
@@ -543,8 +542,7 @@ mod tests {
 
         println!("{}", newrbn);
         println!("{}", newrbn.fmt_header());
-        let _cl1 = newrbn.calculate_cycle_ln(0b000000000101);
-        let _mu1 = newrbn.calculate_transient_ln(0b000000000101);
+        newrbn.calculate_particle(0b000000000101);
         //This generates a cycle length of 4
         assert_eq!(Some(4), newrbn.cycle_len);
         assert_eq!(Some(5), newrbn.trans_len);
@@ -564,7 +562,7 @@ mod tests {
         newrbn.step();
         newrbn.sync();
         state_str.push_str(&newrbn.fmt_state());
-        let expected_states = " 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0,  0,  1,  1,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0,  0,  0,  0,  1,  0,  1,  0,  0,  1,  1,  1,  1,  1,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  1,  0,  1,  0,  0,  1,  1,";
+        let expected_states = " 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0,  1,  0,  0,  0,  0,  1,  0,  1,  0,  0,  1,  1,  1,  1,  1,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  1,  0,  1,  0,  0,  1,  1,  0,  1,  1,  1,  0,  1,  0,  0,  1,  0,  1,  0,";
         assert_eq!(state_str, expected_states);
     }
 

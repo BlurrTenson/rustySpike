@@ -5,7 +5,7 @@ mod particle;
 mod rbn;
 pub mod temp;
 pub mod util;
-use crate::util::cycle_calc::{IsCyclic, IsSynchronous};
+use crate::util::cycle_calc::IsSynchronous;
 use particle::IsSubSymbolic;
 
 fn main() {

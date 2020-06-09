@@ -10,12 +10,3 @@ pub trait IsSynchronous {
     /// Sync changes current state to next state
     fn sync(&self);
 }
-
-/// A particle that shows period cyclic behaviour.
-/// Requires IsSynchronous trait (argubaly it doesn't you can have cyclic behaviour withought
-/// syncronisation but we can deal with that probably never )  
-pub trait IsCyclic: IsSynchronous {
-    fn calculate_cycle_ln(&mut self, init_state: Temperature) -> u64;
-    fn calculate_transient_ln(&mut self, init_state: Temperature) -> u64;
-    fn calculate_liveliness(&self, init_state: Temperature);
-}
