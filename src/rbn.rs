@@ -105,6 +105,7 @@ impl RBN {
     }
     pub fn fmt_header(&self) -> String {
         let mut form_string = String::new();
+        form_string.push_str(&format!("  "));
         for node_idx in (0..self.nodes.len()).rev() {
             form_string.push_str(&format!("{:>3},", node_idx));
         }
@@ -112,10 +113,33 @@ impl RBN {
     }
     pub fn fmt_state(&self) -> String {
         let mut form_string = String::new();
+        form_string.push_str(&format!("  "));
         for node_idx in (0..self.nodes.len()).rev() {
             form_string.push_str(&format!(
                 "{:>3},",
                 self.nodes[node_idx].borrow().get_current_state() as u8
+            ));
+        }
+        form_string
+    }
+    pub fn fmt_cycle_liveliness(&self) -> String {
+        let mut form_string = String::new();
+        form_string.push_str(&format!("CL"));
+        for node_idx in (0..self.nodes.len()).rev() {
+            form_string.push_str(&format!(
+                "{:>3},",
+                self.nodes[node_idx].borrow().get_cycle_liveliness() as i32
+            ));
+        }
+        form_string
+    }
+    pub fn fmt_trans_liveliness(&self) -> String {
+        let mut form_string = String::new();
+        form_string.push_str(&format!("TL"));
+        for node_idx in (0..self.nodes.len()).rev() {
+            form_string.push_str(&format!(
+                "{:>3},",
+                self.nodes[node_idx].borrow().get_trans_liveliness() as i32
             ));
         }
         form_string
@@ -176,8 +200,92 @@ impl RBN {
         self.trans_len = Some(mu);
         return mu;
     }
+    fn update_node_trans_liveliness(&self) {
+        for node in &self.nodes {
+            node.borrow_mut().update_trans_liveliness();
+        }
+    }
+    fn update_node_cycle_liveliness(&self) {
+        for node in &self.nodes {
+            node.borrow_mut().update_cycle_liveliness();
+        }
+    }
+    fn reset_node_liveliness(&self) {
+        for node in &self.nodes {
+            node.borrow_mut().reset_liveliness();
+        }
+    }
+    fn calculate_liveliness(&self, init_state: Temperature) {
+        let mut cl;
+        let mut mu;
+        if self.cycle_len.is_some() && self.trans_len.is_some() {
+            cl = self.cycle_len.unwrap();
+            mu = self.trans_len.unwrap();
+        } else {
+            panic!("Calculating Liveliness with a None cycle or transient Lenght");
+        }
+        self.reset_node_liveliness();
 
-    fn calculate_liveliness(&self, _init_state: Temperature) {}
+        self.set_state(&RBNState::from(init_state));
+        self.update_node_trans_liveliness();
+        println!("-------------------------- \n Transient");
+        println!("{}", self.fmt_state());
+        for _idx in 1..mu {
+            // starting from 1 because set_state above is the first in transient
+            self.step();
+            self.sync();
+            self.update_node_trans_liveliness();
+            println!("{}", self.fmt_state());
+        }
+        println!("-------------------------- \n Cycle");
+        for _idx in 0..cl {
+            self.step();
+            self.sync();
+            self.update_node_cycle_liveliness();
+            println!("{}", self.fmt_state());
+        }
+    }
+}
+
+impl IsSynchronous for RBN {
+    /// Update Nodes for next time step
+    fn step(&self) -> RBNState {
+        let mut state = RBNState::from(0 as u64);
+        let mut idx = 0;
+        for nds in &self.connections {
+            let l = nds.1.borrow_mut().get_current_state();
+            let r = nds.2.borrow_mut().get_current_state();
+            let mut sum = 0;
+            if l {
+                sum += 1;
+            }
+            if r {
+                sum += 2;
+            }
+            state.pattern[idx] = nds.0.borrow_mut().calc_next_state(sum);
+            idx += 1;
+        }
+        state
+    }
+
+    /// Sync all Nodes to the new timestep
+    fn sync(&self) {
+        for nds in &self.nodes {
+            nds.borrow_mut().update_state();
+        }
+    }
+}
+
+impl IsSubSymbolic for RBN {
+    fn calculate_particle(&mut self, init_state: Temperature) -> Stability {
+        let cl = self.calculate_cycle_ln(init_state);
+        let tran = self.calculate_transient_ln(init_state);
+        self.calculate_liveliness(init_state);
+        return Stability::Unstable {
+            cycle: cl,
+            transient: tran,
+        };
+    }
 }
 
 impl From<u16> for RBNState {
@@ -231,62 +339,6 @@ impl fmt::Display for RBN {
         write!(f, "{}", form_string)
     }
 }
-
-impl IsSynchronous for RBN {
-    /// Update Nodes for next time step
-    fn step(&self) -> RBNState {
-        let mut state = RBNState::from(0 as u64);
-        let mut idx = 0;
-        for nds in &self.connections {
-            let l = nds.1.borrow_mut().get_current_state();
-            let r = nds.2.borrow_mut().get_current_state();
-            let mut sum = 0;
-            if l {
-                sum += 1;
-            }
-            if r {
-                sum += 2;
-            }
-            state.pattern[idx] = nds.0.borrow_mut().calc_next_state(sum);
-            idx += 1;
-        }
-        state
-    }
-
-    /// Sync all Nodes to the new timestep
-    fn sync(&self) {
-        for nds in &self.nodes {
-            nds.borrow_mut().update_state();
-        }
-    }
-}
-
-impl IsSubSymbolic for RBN {
-    fn calculate_particle(&mut self, init_state: Temperature) -> Stability {
-        let cl = self.calculate_cycle_ln(init_state);
-        let tran = self.calculate_transient_ln(init_state);
-        return Stability::Unstable {
-            cycle: cl,
-            transient: tran,
-        };
-    }
-}
-// impl IsBondable for RBN {
-//     /// Returns Bonding Property for a specific &BondingSite
-//     /// If the BondingSite is not present on the particle returns None
-//     fn get_bonding_prop(&self, bs: &BondingSite) -> Option<i32>;
-
-//     /// Returns pointers to all BondingSites on the Particle
-//     fn get_all_bonding_sites(&self) -> Vec<&BondingSite>;
-
-//     /// Returns pointers to all BondingSites not currently part of a bond on the Particle
-//     /// If there are no free sites returns None
-//     fn get_free_bonding_sites(&self) -> Option<Vec<&BondingSite>>;
-
-//     /// Returns a random bonding site not currently part of a bond
-//     /// If there are no free sites returns None
-//     fn get_rand_free_bonding_site(&self) -> Option<&BondingSite>;
-// }
 
 #[cfg(test)]
 mod tests {
@@ -417,22 +469,15 @@ mod tests {
         assert_eq!(Some(5), newrbn.trans_len);
         let expected_struct = "ID\tFunction\tStruct\n0,\t1,0,0,1,\t4,5\n1,\t1,1,0,0,\t3,5\n2,\t1,0,0,0,\t0,10\n3,\t1,0,1,1,\t1,4\n4,\t1,1,0,0,\t3,4\n5,\t0,0,0,0,\t4,6\n6,\t1,1,1,0,\t4,8\n7,\t0,1,1,0,\t11,4\n8,\t1,0,0,0,\t2,3\n9,\t0,0,1,0,\t2,11\n10,\t0,1,1,0,\t0,5\n11,\t1,0,1,1,\t9,8\n";
         assert_eq!(format!("{}", newrbn), expected_struct);
-        let mut state_str = String::new();
-        state_str.push_str(&newrbn.fmt_header());
-        newrbn.step();
-        newrbn.sync();
-        state_str.push_str(&newrbn.fmt_state());
-        newrbn.step();
-        newrbn.sync();
-        state_str.push_str(&newrbn.fmt_state());
-        newrbn.step();
-        newrbn.sync();
-        state_str.push_str(&newrbn.fmt_state());
-        newrbn.step();
-        newrbn.sync();
-        state_str.push_str(&newrbn.fmt_state());
-        let expected_states = " 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0,  1,  0,  0,  0,  0,  1,  0,  1,  0,  0,  1,  1,  1,  1,  1,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  1,  0,  1,  0,  0,  1,  1,  0,  1,  1,  1,  0,  1,  0,  0,  1,  0,  1,  0,";
-        assert_eq!(state_str, expected_states);
+
+        let expected_cl = "CL  2,  0,  2,  0, -2,  4, -4,  0,  0, -4,  4,  0,";
+        let mut cl_str = String::new();
+        cl_str.push_str(&newrbn.fmt_cycle_liveliness());
+        assert_eq!(cl_str, expected_cl);
+        let expected_tl = "TL -1,  1, -1, -3, -1,  3, -5, -1,  1, -3,  3,  1,";
+        let mut tl_str = String::new();
+        tl_str.push_str(&newrbn.fmt_trans_liveliness());
+        assert_eq!(tl_str, expected_tl);
     }
 
     #[test]

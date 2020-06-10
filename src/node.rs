@@ -3,11 +3,13 @@ use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct Node {
-    function_table: Vec<bool>, // truth table
-    s_t: Option<bool>,         //state at current time step
-    s_nt: Option<bool>,        //state at next time step
-    pub tbl_size: usize,       //truth table size
-    id: u16,                   //id value , needs to be unique at rbn lvl not htis lvl
+    function_table: Vec<bool>,     // truth table
+    s_t: Option<bool>,             //state at current time step
+    s_nt: Option<bool>,            //state at next time step
+    pub tbl_size: usize,           //truth table size
+    trans_liveliness: Option<i32>, // liveliness of the node
+    cycle_liveliness: Option<i32>, // liveliness of the node
+    id: u16,                       //id value , needs to be unique at rbn lvl not htis lvl
 }
 
 impl Node {
@@ -41,6 +43,8 @@ impl Node {
             s_t: Some(true),
             s_nt: Some(false),
             tbl_size: sz,
+            trans_liveliness: None,
+            cycle_liveliness: None,
             id: node_id,
         }
     }
@@ -56,6 +60,8 @@ impl Node {
             s_t: Some(true),
             s_nt: Some(true),
             tbl_size: sz,
+            trans_liveliness: None,
+            cycle_liveliness: None,
             id: node_id,
         }
     }
@@ -102,6 +108,40 @@ impl Node {
 
     pub fn get_id(&self) -> u16 {
         return self.id;
+    }
+    pub fn reset_liveliness(&mut self) {
+        self.trans_liveliness = None;
+        self.cycle_liveliness = None;
+    }
+    /// Updates the liveliness counter based on current state
+    pub fn update_trans_liveliness(&mut self) {
+        match self.s_t {
+            Some(state) => {
+                if state {
+                    self.trans_liveliness = Some(self.trans_liveliness.unwrap_or(0) + 1);
+                } else {
+                    self.trans_liveliness = Some(self.trans_liveliness.unwrap_or(0) - 1);
+                }
+            }
+            None => panic!("No current State set"),
+        }
+    }
+    pub fn reset_cycle_liveliness(&mut self) {
+        self.cycle_liveliness = None;
+    }
+    /// Updates the liveliness counter based on current state
+    pub fn update_cycle_liveliness(&mut self) {
+        if self.s_t.unwrap() {
+            self.cycle_liveliness = Some(self.cycle_liveliness.unwrap_or(0) + 1);
+        } else {
+            self.cycle_liveliness = Some(self.cycle_liveliness.unwrap_or(0) - 1);
+        }
+    }
+    pub fn get_cycle_liveliness(&self) -> i32 {
+        return self.cycle_liveliness.unwrap();
+    }
+    pub fn get_trans_liveliness(&self) -> i32 {
+        return self.trans_liveliness.unwrap();
     }
 }
 impl Display for Node {

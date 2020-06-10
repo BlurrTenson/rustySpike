@@ -110,28 +110,27 @@ fn main() {
     rbn_struct.push((0, 5));
     rbn_struct.push((9, 8));
 
-    let mut newrbn = rbn::RBN::new(2, 12);
-    //let mut newrbn = rbn::RBN::new_from_def(nds, rbn_struct);
+    // let mut newrbn = rbn::RBN::new(2, 12);
+    let mut newrbn = rbn::RBN::new_from_def(nds, rbn_struct);
 
     println!("{}", newrbn);
     println!("{}", newrbn.fmt_header());
-    eprintln!(
-        "{:?}",
-        newrbn.calculate_particle(0b00000000000000000000000000000110101101)
-    );
-    println!("{}", newrbn.fmt_header());
-    newrbn.step();
-    newrbn.sync();
-    println!("{}", newrbn.fmt_state());
-    newrbn.step();
-    newrbn.sync();
-    println!("{}", newrbn.fmt_state());
-    newrbn.step();
-    newrbn.sync();
-    println!("{}", newrbn.fmt_state());
-    newrbn.step();
-    newrbn.sync();
-    println!("{}", newrbn.fmt_state());
+    eprintln!("{:?}", newrbn.calculate_particle(0b000000000101));
+    println!("{}", newrbn.fmt_cycle_liveliness());
+    println!("{}", newrbn.fmt_trans_liveliness());
+    // println!("{}", newrbn.fmt_header());
+    // newrbn.step();
+    // newrbn.sync();
+    // println!("{}", newrbn.fmt_state());
+    // newrbn.step();
+    // newrbn.sync();
+    // println!("{}", newrbn.fmt_state());
+    // newrbn.step();
+    // newrbn.sync();
+    // println!("{}", newrbn.fmt_state());
+    // newrbn.step();
+    // newrbn.sync();
+    // println!("{}", newrbn.fmt_state());
 
     //let mut cl2 = 1;
     //let mut cl1 = 1;
