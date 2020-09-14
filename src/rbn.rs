@@ -1,13 +1,16 @@
+use crate::node::Node;
+use crate::temp::Temperature;
+use crate::util::bonding::*;
+use crate::util::cycle_calc::*;
+use crate::util::formatters::IsFormatable;
+use particle::Component;
+
 use bit_field::BitField;
 use rand::prelude::IteratorRandom;
+
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
-
-use crate::node::Node;
-use crate::temp::Temperature;
-use crate::util::cycle_calc::*;
-use particle::{IsSubSymbolic, Stability};
 
 #[derive(Debug)]
 pub struct RBNState {
@@ -21,7 +24,76 @@ pub struct RBN {
     cycle_len: Option<u64>,
     trans_len: Option<u64>,
 }
+impl Component for RBN {}
 
+impl IsBondable for RBN {
+    /// Returns Bonding Property for a specific &BondingSite
+    /// If the BondingSite is not present on the particle returns None
+    fn get_bonding_prop(&self, bs: &BondingSite) -> Option<i32> {
+        return None;
+    }
+
+    /// Returns pointers to all BondingSites on the Particle
+    fn get_all_bonding_sites(&self) -> Vec<&BondingSite> {
+        return vec![];
+    }
+
+    /// Returns pointers to all BondingSites not currently part of a bond on the Particle
+    /// If there are no free sites returns None
+    fn get_free_bonding_sites(&self) -> Option<Vec<&BondingSite>> {
+        return None;
+    }
+
+    /// Returns a random bonding site not currently part of a bond
+    /// If there are no free sites returns None
+    fn get_rand_free_bonding_site(&self) -> Option<&BondingSite> {
+        return None;
+    }
+}
+///
+impl IsFormatable for RBN {
+    fn fmt_header(&self) -> String {
+        let mut form_string = String::new();
+        form_string.push_str(&format!("  "));
+        for node_idx in (0..self.nodes.len()).rev() {
+            form_string.push_str(&format!("{:>3},", node_idx));
+        }
+        form_string
+    }
+    fn fmt_state(&self) -> String {
+        let mut form_string = String::new();
+        form_string.push_str(&format!("  "));
+        for node_idx in (0..self.nodes.len()).rev() {
+            form_string.push_str(&format!(
+                "{:>3},",
+                self.nodes[node_idx].borrow().get_current_state() as u8
+            ));
+        }
+        form_string
+    }
+    fn fmt_cycle_liveliness(&self) -> String {
+        let mut form_string = String::new();
+        form_string.push_str(&format!("CL"));
+        for node_idx in (0..self.nodes.len()).rev() {
+            form_string.push_str(&format!(
+                "{:>3},",
+                self.nodes[node_idx].borrow().get_cycle_liveliness() as i32
+            ));
+        }
+        form_string
+    }
+    fn fmt_trans_liveliness(&self) -> String {
+        let mut form_string = String::new();
+        form_string.push_str(&format!("TL"));
+        for node_idx in (0..self.nodes.len()).rev() {
+            form_string.push_str(&format!(
+                "{:>3},",
+                self.nodes[node_idx].borrow().get_trans_liveliness() as i32
+            ));
+        }
+        form_string
+    }
+}
 impl RBN {
     /// Create a new RBN with random structure
     /// k : number of links per Node
@@ -103,49 +175,8 @@ impl RBN {
             idx += 1;
         }
     }
-    pub fn fmt_header(&self) -> String {
-        let mut form_string = String::new();
-        form_string.push_str(&format!("  "));
-        for node_idx in (0..self.nodes.len()).rev() {
-            form_string.push_str(&format!("{:>3},", node_idx));
-        }
-        form_string
-    }
-    pub fn fmt_state(&self) -> String {
-        let mut form_string = String::new();
-        form_string.push_str(&format!("  "));
-        for node_idx in (0..self.nodes.len()).rev() {
-            form_string.push_str(&format!(
-                "{:>3},",
-                self.nodes[node_idx].borrow().get_current_state() as u8
-            ));
-        }
-        form_string
-    }
-    pub fn fmt_cycle_liveliness(&self) -> String {
-        let mut form_string = String::new();
-        form_string.push_str(&format!("CL"));
-        for node_idx in (0..self.nodes.len()).rev() {
-            form_string.push_str(&format!(
-                "{:>3},",
-                self.nodes[node_idx].borrow().get_cycle_liveliness() as i32
-            ));
-        }
-        form_string
-    }
-    pub fn fmt_trans_liveliness(&self) -> String {
-        let mut form_string = String::new();
-        form_string.push_str(&format!("TL"));
-        for node_idx in (0..self.nodes.len()).rev() {
-            form_string.push_str(&format!(
-                "{:>3},",
-                self.nodes[node_idx].borrow().get_trans_liveliness() as i32
-            ));
-        }
-        form_string
-    }
 
-    fn calculate_cycle_ln(&mut self, init_state: Temperature) -> u64 {
+    fn calculate_cycle_ln(&mut self, init_state: Temperature, verbose: bool) -> u64 {
         let mut hare: RBNState;
         let mut tortoise: RBNState;
         let mut cycle_count = 1;
@@ -153,10 +184,14 @@ impl RBN {
 
         tortoise = RBNState::from(init_state);
         self.set_state(&tortoise);
-        println!("{}", self.fmt_state());
+        if verbose {
+            println!("{}", self.fmt_state());
+        }
         hare = self.step();
         self.sync();
-        println!("{}", self.fmt_state());
+        if verbose {
+            println!("{}", self.fmt_state());
+        }
         while tortoise != hare {
             if power == cycle_count {
                 tortoise = hare;
@@ -165,14 +200,16 @@ impl RBN {
             }
             hare = self.step();
             self.sync();
-            println!("{}", self.fmt_state());
+            if verbose {
+                println!("{}", self.fmt_state());
+            }
             cycle_count += 1;
         }
         self.cycle_len = Some(cycle_count);
         return cycle_count;
     }
 
-    fn calculate_transient_ln(&mut self, init_state: Temperature) -> u64 {
+    fn calculate_transient_ln(&mut self, init_state: Temperature, verbose: bool) -> u64 {
         let mut cl;
         if self.cycle_len.is_some() {
             cl = self.cycle_len.unwrap();
@@ -215,7 +252,7 @@ impl RBN {
             node.borrow_mut().reset_liveliness();
         }
     }
-    fn calculate_liveliness(&self, init_state: Temperature) {
+    fn calculate_liveliness(&self, init_state: Temperature, verbose: bool) {
         let mut cl;
         let mut mu;
         if self.cycle_len.is_some() && self.trans_len.is_some() {
@@ -228,21 +265,29 @@ impl RBN {
 
         self.set_state(&RBNState::from(init_state));
         self.update_node_trans_liveliness();
-        println!("-------------------------- \n Transient");
-        println!("{}", self.fmt_state());
+        if verbose {
+            println!("-------------------------- \n Transient");
+            println!("{}", self.fmt_state());
+        }
         for _idx in 1..mu {
             // starting from 1 because set_state above is the first in transient
             self.step();
             self.sync();
             self.update_node_trans_liveliness();
-            println!("{}", self.fmt_state());
+            if verbose {
+                println!("{}", self.fmt_state());
+            }
         }
-        println!("-------------------------- \n Cycle");
+        if verbose {
+            println!("-------------------------- \n Cycle");
+        }
         for _idx in 0..cl {
             self.step();
             self.sync();
             self.update_node_cycle_liveliness();
-            println!("{}", self.fmt_state());
+            if verbose {
+                println!("{}", self.fmt_state());
+            }
         }
     }
 }
@@ -277,10 +322,10 @@ impl IsSynchronous for RBN {
 }
 
 impl IsSubSymbolic for RBN {
-    fn calculate_particle(&mut self, init_state: Temperature) -> Stability {
-        let cl = self.calculate_cycle_ln(init_state);
-        let tran = self.calculate_transient_ln(init_state);
-        self.calculate_liveliness(init_state);
+    fn calculate_particle(&mut self, init_state: Temperature, verbose: bool) -> Stability {
+        let cl = self.calculate_cycle_ln(init_state, verbose);
+        let tran = self.calculate_transient_ln(init_state, verbose);
+        self.calculate_liveliness(init_state, verbose);
         return Stability::Unstable {
             cycle: cl,
             transient: tran,
@@ -463,7 +508,7 @@ mod tests {
 
         println!("{}", newrbn);
         println!("{}", newrbn.fmt_header());
-        newrbn.calculate_particle(0b000000000101);
+        newrbn.calculate_particle(0b000000000101, true);
         //This generates a cycle length of 4
         assert_eq!(Some(4), newrbn.cycle_len);
         assert_eq!(Some(5), newrbn.trans_len);

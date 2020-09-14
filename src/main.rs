@@ -1,13 +1,17 @@
 extern crate bit_field;
 extern crate rand;
 
+use std::cell::{RefCell, RefMut};
+use std::fmt;
+use std::rc::Rc;
 mod node;
 mod particle;
 mod rbn;
 pub mod temp;
 pub mod util;
-use crate::util::cycle_calc::IsSynchronous;
-use particle::IsSubSymbolic;
+use crate::particle::*;
+use crate::util::bonding::IsSubSymbolic;
+use std::borrow::Borrow;
 
 fn main() {
     let mut nds = Vec::new();
@@ -109,16 +113,25 @@ fn main() {
     rbn_struct.push((2, 11));
     rbn_struct.push((0, 5));
     rbn_struct.push((9, 8));
-
     // let mut newrbn = rbn::RBN::new(2, 12);
     let mut newrbn = rbn::RBN::new_from_def(nds, rbn_struct);
+    let mut atom = particle::Particle {
+        components: vec![Rc::new(RefCell::new(newrbn))],
+    };
+    let mut newrbn2 = rbn::RBN::new(2, 12);
+    atom.components.push(Rc::new(RefCell::new(newrbn2)));
+    for _n in 1..20 {
+        atom.components
+            .push(Rc::new(RefCell::new(rbn::RBN::new(2, 12))));
+    }
 
-    println!("{}", newrbn);
-    println!("{}", newrbn.fmt_header());
-    eprintln!("{:?}", newrbn.calculate_particle(0b000000000101));
-    println!("{}", newrbn.fmt_cycle_liveliness());
-    println!("{}", newrbn.fmt_trans_liveliness());
-    // println!("{}", newrbn.fmt_header());
+    for particle in atom.components {
+        let mut brwRBN: RefMut<_> = particle.borrow_mut();
+        //println!("{}", brwRBN.fmt_header());
+        eprintln!("{:?}", brwRBN.calculate_particle(0b000000000101, false));
+        // println!("{}", brwRBN.fmt_cycle_liveliness());
+        // println!("{}", brwRBN.fmt_trans_liveliness());
+    }
     // newrbn.step();
     // newrbn.sync();
     // println!("{}", newrbn.fmt_state());
