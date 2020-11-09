@@ -6,27 +6,50 @@ use crate::util::formatters::IsFormatable;
 use particle::Component;
 
 use bit_field::BitField;
+
 use rand::prelude::IteratorRandom;
+use rand::{thread_rng, Rng};
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
+use std::ptr;
 use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct RBNState {
     pattern: Vec<bool>,
 }
+//I hate this structure with a passion
+//it only exists because I have no way to generate interaction groups withought linking the
+//node index to the node pointer (short of exhaustive search which is expensive)
+#[derive(Debug, Clone)]
+pub struct RBNConnection {
+    node: Rc<RefCell<Node>>,
+    node_idx: usize,
+    source_idx: Vec<usize>,
+}
 
 #[derive(Debug)]
 pub struct RBN {
-    nodes: Vec<Rc<RefCell<Node>>>,
-    connections: Vec<(Rc<RefCell<Node>>, Rc<RefCell<Node>>, Rc<RefCell<Node>>)>,
+    /// List of nodes that are part of this RBN
+    nodes: Vec<RBNConnection>,
+    /// Node Network showing what inputs to each node are TODO(this only works for k=2)
+    //connections: HashMap<usize, usize, usize>,
+    /// Influence map showing how many nodes the key node is input to
+    /// key is the id of the Node (unique within the RBN but not externally)
+    //inf_map: Vec<(u16, u16)>,
+    /// Cycle Length store. NOTE this may be inconsistent depending on when the last time you
+    /// change something in the RBN instance is and if you recalculated it
     cycle_len: Option<u64>,
     trans_len: Option<u64>,
 }
 impl Component for RBN {}
 
 impl IsBondable for RBN {
+    fn generate_bonding_sites(&mut self) -> Vec<BondingSite> {
+        return self.generate_interaction_groups_inf(self.nodes.len() as u16, false);
+    }
     /// Returns Bonding Property for a specific &BondingSite
     /// If the BondingSite is not present on the particle returns None
     fn get_bonding_prop(&self, bs: &BondingSite) -> Option<i32> {
@@ -66,7 +89,7 @@ impl IsFormatable for RBN {
         for node_idx in (0..self.nodes.len()).rev() {
             form_string.push_str(&format!(
                 "{:>3},",
-                self.nodes[node_idx].borrow().get_current_state() as u8
+                self.nodes[node_idx].node.borrow().get_current_state() as u8
             ));
         }
         form_string
@@ -77,7 +100,7 @@ impl IsFormatable for RBN {
         for node_idx in (0..self.nodes.len()).rev() {
             form_string.push_str(&format!(
                 "{:>3},",
-                self.nodes[node_idx].borrow().get_cycle_liveliness() as i32
+                self.nodes[node_idx].node.borrow().get_cycle_liveliness() as i32
             ));
         }
         form_string
@@ -88,7 +111,7 @@ impl IsFormatable for RBN {
         for node_idx in (0..self.nodes.len()).rev() {
             form_string.push_str(&format!(
                 "{:>3},",
-                self.nodes[node_idx].borrow().get_trans_liveliness() as i32
+                self.nodes[node_idx].node.borrow().get_trans_liveliness() as i32
             ));
         }
         form_string
@@ -108,30 +131,53 @@ impl RBN {
             )
         }
 
-        let mut inv_nodes = Vec::new();
+        let mut inv_nodes = Vec::<RBNConnection>::new();
         for x in 0..n {
-            inv_nodes.push(Rc::new(RefCell::new(Node::new(k, x))));
+            let connection = RBNConnection {
+                node: Rc::new(RefCell::new(Node::new(k, x))),
+                node_idx: x as usize,
+                source_idx: vec![],
+            };
+            // make the right number of nodes
+            inv_nodes.push(connection);
         }
-        let mut links = Vec::new();
+        let mut rng = thread_rng();
+        //let mut links = Vec::new();
         let mut rnjesus = rand::thread_rng();
         for idx in 0..inv_nodes.len() {
-            links.push((
-                inv_nodes[idx].clone(),
-                inv_nodes
-                    .iter()
-                    .choose(&mut rnjesus)
-                    .expect("Node list empty")
-                    .clone(),
-                inv_nodes
-                    .iter()
-                    .choose(&mut rnjesus)
-                    .expect("Node list empty")
-                    .clone(),
-            ))
+            // for each node push the connections
+            for _x in 0..k {
+                let n: u16 = rng.gen_range(0, n);
+                inv_nodes[idx]
+                    .node
+                    .borrow_mut()
+                    .inputs
+                    .push(inv_nodes[n as usize].node.clone());
+                inv_nodes[idx].source_idx.push(n as usize);
+            }
+            let mut self_inf = 0;
+            //itterate over node inputs and increment the input node's influece map
+            //hacky because I can't call inc_influence on myself so self inflece is tallied and
+            //then updated in the loop below
+            for c in inv_nodes[idx].node.borrow().inputs.iter() {
+                if !Rc::ptr_eq(&c, &inv_nodes[idx].node) {
+                    c.borrow_mut().inc_influence();
+                } else {
+                    self_inf += 1;
+                }
+            }
+            for _x in 0..self_inf {
+                inv_nodes[idx].node.borrow_mut().inc_influence();
+            }
+        }
+        // we have to inform the nodes that influence calcualtion is complete
+        for nd in &inv_nodes {
+            nd.node.borrow_mut().structure_set();
         }
         RBN {
-            connections: links,
+            // connections: links,
             nodes: inv_nodes,
+            // inf_map: inf_map_temp,
             cycle_len: None,
             trans_len: None,
         }
@@ -147,22 +193,51 @@ impl RBN {
                 strct_tbl.len()
             );
         }
-        let mut inv_nodes = Vec::new();
+        let mut inv_nodes = Vec::<RBNConnection>::new();
         let mut id = 0;
-        for n in nd_tbls.into_iter() {
-            inv_nodes.push(Rc::new(RefCell::new(Node::new_with_tbl(n, id))));
+        for tbl in nd_tbls.into_iter() {
+            let connection = RBNConnection {
+                node: Rc::new(RefCell::new(Node::new_with_tbl(tbl, id))),
+                node_idx: id as usize,
+                source_idx: vec![],
+            };
+            inv_nodes.push(connection);
             id += 1
         }
-        let mut links = Vec::new();
+        //let mut links = Vec::new();
         for idx in 0..inv_nodes.len() {
-            links.push((
-                inv_nodes[idx].clone(),
-                inv_nodes[strct_tbl[idx].0].clone(),
-                inv_nodes[strct_tbl[idx].1].clone(),
-            ))
+            inv_nodes[idx]
+                .node
+                .borrow_mut()
+                .inputs
+                .push(inv_nodes[strct_tbl[idx].0].node.clone());
+            inv_nodes[idx]
+                .node
+                .borrow_mut()
+                .inputs
+                .push(inv_nodes[strct_tbl[idx].1].node.clone());
+            let mut self_inf = 0;
+            //itterate over node inputs and increment the input node's influece map
+            for c in inv_nodes[idx].node.borrow().inputs.iter() {
+                if !Rc::ptr_eq(&c, &inv_nodes[idx].node) {
+                    c.borrow_mut().inc_influence();
+                } else {
+                    self_inf += 1;
+                }
+            }
+            for _x in 0..self_inf {
+                inv_nodes[idx].node.borrow_mut().inc_influence();
+            }
+        }
+        // we have to inform the nodes that influence calcualtion is complete
+        // TODO , this needs to go away and we need a better way to define the 3 distinct states a
+        // node can be in, possibly there is a constructor in rust I can call? Alternatively we can
+        // do it with Types I think (change type of the node)
+        for nd in &inv_nodes {
+            nd.node.borrow_mut().structure_set();
         }
         RBN {
-            connections: links,
+            //connections: links,
             nodes: inv_nodes,
             cycle_len: None,
             trans_len: None,
@@ -170,10 +245,122 @@ impl RBN {
     }
     fn set_state(&self, state: &RBNState) {
         let mut idx = 0;
-        for node in &self.nodes {
-            node.borrow_mut().set_current_state(state.pattern[idx]);
+        for n in &self.nodes {
+            n.node.borrow_mut().set_current_state(state.pattern[idx]);
             idx += 1;
         }
+    }
+    /// Generates interaction groups based on the influence map.
+    /// If is_least_inf is true then least influencial is first
+    /// TODO Need to test that influence ordersing are exactly opposite (ie equivelent numbers are
+    /// accessed in the same order
+    fn generate_interaction_groups_inf(
+        &self,
+        max_group_size: u16,
+        is_least_inf: bool,
+    ) -> Vec<BondingSite> {
+        // gen a working copy of the node list
+        let mut nds_tmp = HashMap::<usize, Rc<RefCell<Node>>>::new();
+        // generate influence set
+        // (nodes_idx, influence)
+        let mut inf_set_tmp = Vec::<(usize, u16)>::new();
+        for nidx in 0..self.nodes.len() {
+            inf_set_tmp.push((
+                nidx,
+                self.nodes[nidx].node.borrow().get_influence().unwrap(),
+            ));
+            nds_tmp.insert(nidx, self.nodes[nidx].node.clone());
+        }
+        // sort by influence
+        // if is_least_inf {
+        //     inf_set_tmp.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0))); // inf_set_tmp[0] is least influencial, if equal smallest id is first
+        // } else {
+        //     inf_set_tmp.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0))); // inf_set_tmp[0] is most influencial, if equal biggest id is first
+        // }
+        // println!("{:?}", inf_set_tmp);
+        let mut ig_set = Vec::<BondingSite>::new();
+
+        // while there are unassinged nodes
+        while &nds_tmp.len() != &0 {
+            if is_least_inf {
+                inf_set_tmp.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0))); // inf_set_tmp[0] is least influencial, if equal smallest id is first
+            } else {
+                inf_set_tmp.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0))); // inf_set_tmp[0] is most influencial, if equal biggest id is first
+            }
+            //println!("{:?}", inf_set_tmp);
+            let mut interaction_group = Vec::<Rc<RefCell<Node>>>::new();
+            let mut current_node_idx = inf_set_tmp.pop().unwrap().0; // take a node from the ordered list
+                                                                     //println!("current node {}", current_node_idx);
+            let mut current_ig_size = 1;
+            interaction_group.push(nds_tmp[&current_node_idx].clone());
+            nds_tmp.remove(&current_node_idx);
+            //while the curren interaction group is not full
+            while current_ig_size < max_group_size {
+                current_ig_size += 1;
+                //remove the node from the working list
+                nds_tmp.remove(&current_node_idx);
+                // get the input with the most influence
+                let next_idx = self.nodes[current_node_idx]
+                    .node
+                    .borrow()
+                    .get_input_by_inf(is_least_inf)
+                    .expect("Node has no inputs")
+                    .borrow()
+                    .get_id() as usize;
+                //println!("\t Cur: {} Next node: {}", current_node_idx, next_idx);
+                // if that input is still in the list
+                if nds_tmp.contains_key(&next_idx) {
+                    // select it as next node
+                    current_node_idx = next_idx;
+                    //add it to the interaciton group
+                    interaction_group.push(nds_tmp[&current_node_idx].clone());
+                    //remove the node from the list of available nodes
+                    nds_tmp.remove(&next_idx);
+                } else {
+                    // if the most influential is no longer in the list take the other
+                    let next_idx = self.nodes[current_node_idx]
+                        .node
+                        .borrow()
+                        .get_input_by_inf(!is_least_inf)
+                        .expect("Node has no inputs")
+                        .borrow()
+                        .get_id() as usize;
+                    // println!("\t\t Visited, trying: {}", next_idx);
+                    if nds_tmp.contains_key(&next_idx) {
+                        // select it as next node
+                        current_node_idx = next_idx;
+                        //add it to the interaciton group
+                        interaction_group.push(nds_tmp[&current_node_idx].clone());
+                        //remove the node from the list of available nodes
+                        nds_tmp.remove(&next_idx);
+                    } else {
+                        // println!("\t\t Both Missing , end of list");
+                        // if both are missing then end the interaction_group
+                        break;
+                    }
+                }
+            }
+            // interaction_group is full
+            ig_set.push(BondingSite::new(interaction_group));
+            // now we get a new list of nodes based on what's left in nds_tmp
+            inf_set_tmp = vec![];
+            for nd in &nds_tmp {
+                inf_set_tmp.push((*nd.0, nd.1.borrow().get_influence().unwrap()));
+            }
+            // sort by influence
+            // if is_least_inf {
+            //     inf_set_tmp.sort_by(|a, b| b.1.cmp(&a.1).then(b.0.cmp(&a.0))); // inf_set_tmp[0] is least influencial, if equal smallest id is first
+            // } else {
+            //     inf_set_tmp.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0))); // inf_set_tmp[0] is most influencial, if equal biggest id is first
+            // }
+            // println!("{:?}", inf_set_tmp);
+        }
+        // println!("{}", ig_set.len());
+        for bond in &ig_set {
+            println!("{}", bond)
+        }
+
+        return ig_set;
     }
 
     fn calculate_cycle_ln(&mut self, init_state: Temperature, verbose: bool) -> u64 {
@@ -238,18 +425,18 @@ impl RBN {
         return mu;
     }
     fn update_node_trans_liveliness(&self) {
-        for node in &self.nodes {
-            node.borrow_mut().update_trans_liveliness();
+        for n in &self.nodes {
+            n.node.borrow_mut().update_trans_liveliness();
         }
     }
     fn update_node_cycle_liveliness(&self) {
-        for node in &self.nodes {
-            node.borrow_mut().update_cycle_liveliness();
+        for n in &self.nodes {
+            n.node.borrow_mut().update_cycle_liveliness();
         }
     }
     fn reset_node_liveliness(&self) {
-        for node in &self.nodes {
-            node.borrow_mut().reset_liveliness();
+        for n in &self.nodes {
+            n.node.borrow_mut().reset_liveliness();
         }
     }
     fn calculate_liveliness(&self, init_state: Temperature, verbose: bool) {
@@ -297,9 +484,14 @@ impl IsSynchronous for RBN {
     fn step(&self) -> RBNState {
         let mut state = RBNState::from(0 as u64);
         let mut idx = 0;
-        for nds in &self.connections {
-            let l = nds.1.borrow_mut().get_current_state();
-            let r = nds.2.borrow_mut().get_current_state();
+        for nds in &self.nodes {
+            // get current state of inputs:
+            // When a node refers to itself we have no issue since the references are immutable (so
+            // we can borrow more then once) if either the node borrow or the input borrow is
+            // borrow_mut() the thing will panic at runtime
+            // Test case panics on inputs[1] if there is a borrow_mut()
+            let l = nds.node.borrow().inputs[0].borrow().get_current_state();
+            let r = nds.node.borrow().inputs[1].borrow().get_current_state();
             let mut sum = 0;
             if l {
                 sum += 1;
@@ -307,7 +499,7 @@ impl IsSynchronous for RBN {
             if r {
                 sum += 2;
             }
-            state.pattern[idx] = nds.0.borrow_mut().calc_next_state(sum);
+            state.pattern[idx] = nds.node.borrow_mut().calc_next_state(sum);
             idx += 1;
         }
         state
@@ -316,7 +508,7 @@ impl IsSynchronous for RBN {
     /// Sync all Nodes to the new timestep
     fn sync(&self) {
         for nds in &self.nodes {
-            nds.borrow_mut().update_state();
+            nds.node.borrow_mut().update_state();
         }
     }
 }
@@ -365,20 +557,21 @@ impl PartialEq for RBNState {
         self.pattern == other.pattern
     }
 }
-
+/// Default print of RBN shows structure and node truth tables
 impl fmt::Display for RBN {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut form_string = String::new();
-        form_string.push_str("ID\tFunction\tStruct\n");
-        for node_idx in 0..self.nodes.len() {
-            form_string.push_str(&format!("{},\t", &self.nodes[node_idx].borrow().get_id()));
-            for val in self.nodes[node_idx].borrow().get_function_table() {
+        form_string.push_str("ID\tFunction\tStruct\tInfluence\n");
+        for n in &self.nodes {
+            form_string.push_str(&format!("{},\t", n.node.borrow().get_id()));
+            for val in n.node.borrow().get_function_table() {
                 form_string.push_str(&format!("{},", *val as u8));
             }
             form_string.push_str(&format!(
-                "\t{},{}\n",
-                &self.connections[node_idx].1.borrow().get_id(),
-                &self.connections[node_idx].2.borrow().get_id()
+                "\t{},{},\t{}\n",
+                n.node.borrow().inputs[0].borrow().get_id(),
+                n.node.borrow().inputs[1].borrow().get_id(),
+                n.node.borrow().get_influence().unwrap_or(0)
             ));
         }
         write!(f, "{}", form_string)
@@ -512,7 +705,7 @@ mod tests {
         //This generates a cycle length of 4
         assert_eq!(Some(4), newrbn.cycle_len);
         assert_eq!(Some(5), newrbn.trans_len);
-        let expected_struct = "ID\tFunction\tStruct\n0,\t1,0,0,1,\t4,5\n1,\t1,1,0,0,\t3,5\n2,\t1,0,0,0,\t0,10\n3,\t1,0,1,1,\t1,4\n4,\t1,1,0,0,\t3,4\n5,\t0,0,0,0,\t4,6\n6,\t1,1,1,0,\t4,8\n7,\t0,1,1,0,\t11,4\n8,\t1,0,0,0,\t2,3\n9,\t0,0,1,0,\t2,11\n10,\t0,1,1,0,\t0,5\n11,\t1,0,1,1,\t9,8\n";
+        let expected_struct = "ID\tFunction\tStruct\tInfluence\n0,\t1,0,0,1,\t4,5,\t2\n1,\t1,1,0,0,\t3,5,\t1\n2,\t1,0,0,0,\t0,10,\t2\n3,\t1,0,1,1,\t1,4,\t3\n4,\t1,1,0,0,\t3,4,\t6\n5,\t0,0,0,0,\t4,6,\t3\n6,\t1,1,1,0,\t4,8,\t1\n7,\t0,1,1,0,\t11,4,\t0\n8,\t1,0,0,0,\t2,3,\t2\n9,\t0,0,1,0,\t2,11,\t1\n10,\t0,1,1,0,\t0,5,\t1\n11,\t1,0,1,1,\t9,8,\t2\n";
         assert_eq!(format!("{}", newrbn), expected_struct);
 
         let expected_cl = "CL  2,  0,  2,  0, -2,  4, -4,  0,  0, -4,  4,  0,";

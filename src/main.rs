@@ -10,7 +10,7 @@ mod rbn;
 pub mod temp;
 pub mod util;
 use crate::particle::*;
-use crate::util::bonding::IsSubSymbolic;
+use crate::util::bonding::{IsBondable, IsSubSymbolic};
 use std::borrow::Borrow;
 
 fn main() {
@@ -115,23 +115,38 @@ fn main() {
     rbn_struct.push((9, 8));
     // let mut newrbn = rbn::RBN::new(2, 12);
     let mut newrbn = rbn::RBN::new_from_def(nds, rbn_struct);
+    newrbn.calculate_particle(0, true);
+    print!("{}", newrbn);
+    newrbn.generate_bonding_sites();
+    println!("---------------------------------------");
+    newrbn.generate_bonding_sites();
     let mut atom = particle::Particle {
+        bonding_sites: newrbn.generate_bonding_sites(),
         components: vec![Rc::new(RefCell::new(newrbn))],
     };
-    let mut newrbn2 = rbn::RBN::new(2, 12);
-    atom.components.push(Rc::new(RefCell::new(newrbn2)));
-    for _n in 1..20 {
-        atom.components
-            .push(Rc::new(RefCell::new(rbn::RBN::new(2, 12))));
-    }
+    // println!("---------------------------------------");
+    // let mut newrbn2 = rbn::RBN::new(2, 12);
+    // newrbn2.calculate_particle(0, true);
+    // print!("{}", newrbn2);
+    // newrbn2.generate_interaction_groups_inf(23, false);
+    // println!("---------------------------------------");
+    // newrbn2.generate_interaction_groups_inf(23, true);
 
-    for particle in atom.components {
-        let mut brwRBN: RefMut<_> = particle.borrow_mut();
-        //println!("{}", brwRBN.fmt_header());
-        eprintln!("{:?}", brwRBN.calculate_particle(0b000000000101, false));
-        // println!("{}", brwRBN.fmt_cycle_liveliness());
-        // println!("{}", brwRBN.fmt_trans_liveliness());
-    }
+    // atom.components.push(Rc::new(RefCell::new(newrbn2)));
+    // for _n in 1..20 {
+    //     atom.components
+    //         .push(Rc::new(RefCell::new(rbn::RBN::new(2, 12))));
+    // }
+
+    // for particle in atom.components {
+    //     let mut brwRBN: RefMut<_> = particle.borrow_mut();
+
+    //     println!("{}", brwRBN);
+    //     eprintln!("{:?}", brwRBN.calculate_particle(0b000000000101, false));
+    //     // println!("{}", brwRBN.fmt_cycle_liveliness());
+    //     //  o
+    //     // println!("{}", brwRBN.fmt_trans_liveliness());
+    // }
     // newrbn.step();
     // newrbn.sync();
     // println!("{}", newrbn.fmt_state());

@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Display;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Node {
@@ -10,6 +12,8 @@ pub struct Node {
     trans_liveliness: Option<i32>, // liveliness of the node
     cycle_liveliness: Option<i32>, // liveliness of the node
     id: u16,                       //id value , needs to be unique at rbn lvl not htis lvl
+    pub inputs: Vec<Rc<RefCell<Node>>>,
+    influence: Option<u16>,
 }
 
 impl Node {
@@ -46,6 +50,8 @@ impl Node {
             trans_liveliness: None,
             cycle_liveliness: None,
             id: node_id,
+            inputs: vec![],
+            influence: None,
         }
     }
 
@@ -63,6 +69,8 @@ impl Node {
             trans_liveliness: None,
             cycle_liveliness: None,
             id: node_id,
+            inputs: vec![],
+            influence: None,
         }
     }
 
@@ -142,6 +150,45 @@ impl Node {
     }
     pub fn get_trans_liveliness(&self) -> i32 {
         return self.trans_liveliness.unwrap();
+    }
+    pub fn get_influence(&self) -> Option<u16> {
+        return self.influence;
+    }
+    //TODO this function should actually sort inputs by influence and ID to give absolute ordering
+    //(which is the same as RBN::generate_interaction_groups_inf()) and then it can return
+    //first/last or even the hole list. Need this if you want to do k>2
+    pub fn get_input_by_inf(&self, least: bool) -> Option<Rc<RefCell<Node>>> {
+        if self.inputs.len() < 2 {
+            return None;
+        }
+
+        if self.inputs[0].borrow().get_influence() <= self.inputs[1].borrow().get_influence() {
+            if least {
+                return Some(self.inputs[0].clone());
+            } else {
+                return Some(self.inputs[1].clone());
+            }
+        } else {
+            if least {
+                return Some(self.inputs[1].clone());
+            } else {
+                return Some(self.inputs[0].clone());
+            }
+        }
+    }
+    //once the structure is set the influence is set, if it is still none then we set it to 0
+    pub fn structure_set(&mut self) {
+        match self.influence {
+            Some(x) => self.influence = Some(x),
+            None => self.influence = Some(0),
+        }
+    }
+    pub fn inc_influence(&mut self) {
+        println!("incrementing node influence");
+        match self.influence {
+            Some(x) => self.influence = Some(x + 1),
+            None => self.influence = Some(1),
+        }
     }
 }
 impl Display for Node {
