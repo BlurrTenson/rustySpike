@@ -1,7 +1,7 @@
 /target
 **/*.rs.bk
 .*.swp
-
+.vscode
 scrap
 
 Cargo.lock
