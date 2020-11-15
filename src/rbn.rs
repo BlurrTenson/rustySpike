@@ -609,6 +609,132 @@ mod tests {
         assert_eq!(false, n.get_state(3));
     }
     #[test]
+    fn test_rbn_interaction_list() {
+        let mut nds = Vec::new();
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(false);
+        tbl.push(true);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(false);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(true);
+        tbl.push(true);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(false);
+        tbl.push(false);
+        tbl.push(false);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(true);
+        tbl.push(true);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(false);
+        tbl.push(true);
+        tbl.push(true);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(false);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(false);
+        tbl.push(false);
+        tbl.push(true);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(false);
+        tbl.push(true);
+        tbl.push(true);
+        tbl.push(false);
+        nds.push(tbl);
+        let mut tbl = Vec::new();
+        tbl.push(true);
+        tbl.push(false);
+        tbl.push(true);
+        tbl.push(true);
+        nds.push(tbl);
+
+        let mut rbn_struct = Vec::<(usize, usize)>::new();
+        rbn_struct.push((4, 5));
+        rbn_struct.push((3, 5));
+        rbn_struct.push((0, 10));
+        rbn_struct.push((1, 4));
+        rbn_struct.push((3, 4));
+        rbn_struct.push((4, 6));
+        rbn_struct.push((4, 8));
+        rbn_struct.push((11, 4));
+        rbn_struct.push((2, 3));
+        rbn_struct.push((2, 11));
+        rbn_struct.push((0, 5));
+        rbn_struct.push((9, 8));
+        let mut newrbn = RBN::new_from_def(nds, rbn_struct);
+
+        println!("{}", newrbn);
+        println!("{}", newrbn.fmt_header());
+        newrbn.calculate_particle(0b000000000101, true);
+        let bonding_sites = newrbn.generate_interaction_groups_inf(23, false);
+        let mut generated_sites = String::new();
+        for bonding_site in bonding_sites {
+            generated_sites.push_str(&format!("{}", bonding_site));
+        }
+        let expected_sites = "[4, 3, 1, 5, 6, 8, 2, 0][11, 9][10][7]";
+        assert_eq!(generated_sites, expected_sites);
+
+        let bonding_sites = newrbn.generate_interaction_groups_inf(23, true);
+        let mut generated_sites = String::new();
+        for bonding_site in bonding_sites {
+            generated_sites.push_str(&format!("{}", bonding_site));
+        }
+        let expected_sites = "[7, 11, 9, 2, 10, 0, 5, 6, 8, 3, 1][4]";
+        assert_eq!(generated_sites, expected_sites);
+
+        let bonding_sites = newrbn.generate_interaction_groups_inf(2, false);
+        let mut generated_sites = String::new();
+        for bonding_site in bonding_sites {
+            generated_sites.push_str(&format!("{}", bonding_site));
+        }
+        let expected_sites = "[4, 3][5, 6][11, 8][2, 0][10][9][1][7]";
+        assert_eq!(generated_sites, expected_sites);
+
+        let bonding_sites = newrbn.generate_interaction_groups_inf(1, false);
+        let mut generated_sites = String::new();
+        for bonding_site in bonding_sites {
+            generated_sites.push_str(&format!("{}", bonding_site));
+        }
+        let expected_sites = "[4][5][3][11][8][2][0][10][9][6][1][7]";
+        assert_eq!(generated_sites, expected_sites);
+    }
+    #[test]
     fn test_rbn_calc() {
         let mut nds = Vec::new();
         let mut tbl = Vec::new();
